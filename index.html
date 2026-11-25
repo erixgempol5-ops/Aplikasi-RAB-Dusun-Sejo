@@ -1,0 +1,1938 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SI-RAB Dusun Sejo — Perencanaan, Approval & Distribusi Dana Proyek</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 9999px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
+    @media print {
+      body * { visibility: hidden; }
+      #printArea, #printArea * { visibility: visible; }
+      #printArea {
+        position: fixed;
+        left: 0;
+        top: 0;
+        width: 100%;
+        background: white;
+        padding: 20px;
+        z-index: 9999;
+      }
+      .no-print { display: none !important; }
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased min-h-screen">
+
+  <!-- ==================== 1. HALAMAN LOGIN TERPADU ==================== -->
+  <div id="loginScreen" class="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-900 via-emerald-950 to-slate-900">
+    <div class="max-w-4xl w-full bg-white rounded-3xl shadow-2xl overflow-hidden grid grid-cols-1 lg:grid-cols-12 border border-slate-200/20">
+      <!-- Panel Kiri: Informasi Sistem & Status Koneksi -->
+      <div class="lg:col-span-5 bg-gradient-to-br from-emerald-700 to-teal-800 text-white p-8 flex flex-col justify-between">
+        <div>
+          <div class="inline-flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-white/15 text-emerald-100 text-xs font-semibold mb-6">
+            <i data-lucide="landmark" class="w-4 h-4"></i>
+            <span>Pemerintah Dusun Sejo</span>
+          </div>
+          <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight leading-tight">
+            SI-RAB & Jadwal Proyek Dusun
+          </h1>
+          <p class="text-emerald-100/90 text-sm mt-3 leading-relaxed">
+            Sistem terpadu penyusunan Rencana Anggaran Biaya, jadwal pelaksanaan, persetujuan berjenjang, dan pendistribusian dana proyek dusun.
+          </p>
+
+          <!-- Alur Approval 4 Tahap -->
+          <div class="mt-7 space-y-2.5 bg-black/15 rounded-2xl p-4 border border-white/10">
+            <div class="text-[11px] font-bold uppercase tracking-wider text-emerald-200 mb-2">Alur Otorisasi Berjenjang</div>
+            <div class="flex items-center gap-2.5 text-xs">
+              <span class="w-5 h-5 rounded-full bg-blue-500 text-white font-bold flex items-center justify-center text-[10px]">1</span>
+              <span><strong>Sie Pembangunan</strong> (Penyusun RAB)</span>
+            </div>
+            <div class="flex items-center gap-2.5 text-xs">
+              <span class="w-5 h-5 rounded-full bg-amber-500 text-white font-bold flex items-center justify-center text-[10px]">2</span>
+              <span><strong>Ketua RW</strong> (Approval Tahap 1)</span>
+            </div>
+            <div class="flex items-center gap-2.5 text-xs">
+              <span class="w-5 h-5 rounded-full bg-purple-500 text-white font-bold flex items-center justify-center text-[10px]">3</span>
+              <span><strong>Kepala Dusun / Kasun</strong> (Approval Terakhir)</span>
+            </div>
+            <div class="flex items-center gap-2.5 text-xs">
+              <span class="w-5 h-5 rounded-full bg-teal-400 text-slate-900 font-bold flex items-center justify-center text-[10px]">4</span>
+              <span><strong>Bendahara Dusun</strong> (Distribusi Dana)</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-8 pt-4 border-t border-white/15 space-y-2">
+          <div id="loginDbStatusBadge" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/15 text-xs font-medium">
+            <span class="w-2 h-2 rounded-full bg-amber-300 animate-pulse"></span>
+            <span>Memeriksa koneksi database...</span>
+          </div>
+          <div id="loginDbSubtext" class="text-[11px] text-emerald-100/80 leading-relaxed"></div>
+          <button type="button" onclick="openSupabaseModal()" class="text-xs underline text-emerald-200 hover:text-white flex items-center gap-1.5 pt-1">
+            <i data-lucide="database" class="w-3.5 h-3.5"></i>
+            <span>Pengaturan Koneksi Supabase & SQL</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Panel Kanan: Form Login Resmi -->
+      <div class="lg:col-span-7 p-8 sm:p-10 flex flex-col justify-center bg-white">
+        <div class="mb-6">
+          <h2 class="text-2xl font-bold text-slate-900">Masuk ke Sistem</h2>
+          <p class="text-sm text-slate-500 mt-1">Gunakan akun perangkat dusun (Administrator, Sie Pembangunan, RW, Kasun, atau Bendahara).</p>
+        </div>
+
+        <div id="loginErrorAlert" class="hidden mb-5 p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-start gap-2.5">
+          <i data-lucide="alert-circle" class="w-4 h-4 shrink-0 mt-0.5"></i>
+          <span id="loginErrorText">Username atau kata sandi salah.</span>
+        </div>
+
+        <form id="loginForm" onsubmit="handleLoginSubmit(event)" class="space-y-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">Username atau Email</label>
+            <div class="relative">
+              <i data-lucide="user" class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2"></i>
+              <input id="loginUsername" type="text" required placeholder="Contoh: admin, sie_pembangunan, rw01, kasun, bendahara"
+                class="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition" />
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">Kata Sandi</label>
+            <div class="relative">
+              <i data-lucide="lock" class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2"></i>
+              <input id="loginPassword" type="password" required placeholder="Masukkan kata sandi"
+                class="w-full pl-10 pr-11 py-3 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition" />
+              <button type="button" onclick="togglePasswordVisibility()" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1">
+                <i id="eyeIcon" data-lucide="eye" class="w-4 h-4"></i>
+              </button>
+            </div>
+          </div>
+
+          <button id="btnLoginSubmit" type="submit"
+            class="w-full py-3.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2 transition cursor-pointer">
+            <i data-lucide="log-in" class="w-4 h-4"></i>
+            <span>Masuk ke Dashboard</span>
+          </button>
+        </form>
+
+        <div class="mt-6 pt-5 border-t border-slate-100 text-xs text-slate-500 flex flex-wrap items-center justify-between gap-2">
+          <span>Daftar Akun Default: <code class="bg-slate-100 px-1.5 py-0.5 rounded text-slate-700">admin / admin123</code></span>
+          <span class="text-slate-400">v2.5 • Supabase Connected</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 2. DASHBOARD UTAMA ==================== -->
+  <div id="mainApp" class="hidden min-h-screen flex flex-col">
+    <!-- Top Navbar -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-30 no-print">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-sm">
+            <i data-lucide="landmark" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="font-bold text-slate-900 text-base sm:text-lg leading-none">SI-RAB Dusun Sejo</span>
+              <span id="headerDbBadge" class="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                <span>Supabase Live</span>
+              </span>
+            </div>
+            <p class="text-xs text-slate-500 mt-0.5">Perencanaan, Approval & Distribusi Dana Proyek</p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2 sm:gap-3">
+          <button onclick="openSupabaseModal()" class="p-2 sm:px-3 sm:py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600 text-xs font-medium flex items-center gap-1.5" title="Koneksi Supabase & SQL">
+            <i data-lucide="database" class="w-4 h-4 text-emerald-600"></i>
+            <span class="hidden md:inline">Database</span>
+          </button>
+
+          <div class="flex items-center gap-2.5 pl-2 sm:pl-3 border-l border-slate-200">
+            <div class="text-right hidden sm:block">
+              <div id="navUserName" class="text-xs font-bold text-slate-800">Nama Pengguna</div>
+              <div id="navUserRole" class="text-[11px] font-medium text-emerald-700">Role</div>
+            </div>
+            <div id="navUserAvatar" class="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-800 font-bold text-xs flex items-center justify-center">
+              USR
+            </div>
+            <button onclick="handleLogout()" class="p-2 rounded-xl text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition" title="Keluar">
+              <i data-lucide="log-out" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center gap-1 overflow-x-auto border-t border-slate-100 bg-slate-50/60">
+        <button onclick="switchTab('overview')" id="tabBtn-overview" class="tab-btn px-4 py-3 text-xs sm:text-sm font-semibold border-b-2 border-emerald-600 text-emerald-700 whitespace-nowrap flex items-center gap-2">
+          <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+          <span>Ringkasan & Analitik</span>
+        </button>
+        <button onclick="switchTab('rab')" id="tabBtn-rab" class="tab-btn px-4 py-3 text-xs sm:text-sm font-medium border-b-2 border-transparent text-slate-600 hover:text-slate-900 whitespace-nowrap flex items-center gap-2">
+          <i data-lucide="file-spreadsheet" class="w-4 h-4"></i>
+          <span>Pengajuan, Approval & Dana</span>
+          <span id="navBadgePending" class="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-amber-100 text-amber-800">0</span>
+        </button>
+        <button onclick="switchTab('schedule')" id="tabBtn-schedule" class="tab-btn px-4 py-3 text-xs sm:text-sm font-medium border-b-2 border-transparent text-slate-600 hover:text-slate-900 whitespace-nowrap flex items-center gap-2">
+          <i data-lucide="calendar-range" class="w-4 h-4"></i>
+          <span>Jadwal Proyek (Timeline)</span>
+        </button>
+        <button onclick="switchTab('users')" id="tabBtn-users" class="tab-btn hidden px-4 py-3 text-xs sm:text-sm font-medium border-b-2 border-transparent text-slate-600 hover:text-slate-900 whitespace-nowrap flex items-center gap-2">
+          <i data-lucide="users" class="w-4 h-4"></i>
+          <span>Manajemen Pengguna</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <!-- Role Action Banner -->
+      <div id="roleBanner" class="mb-6 rounded-2xl p-4 sm:p-5 bg-gradient-to-r from-emerald-700 to-teal-700 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm no-print">
+        <div class="flex items-start sm:items-center gap-3.5">
+          <div class="w-11 h-11 rounded-xl bg-white/15 flex items-center justify-center shrink-0">
+            <i id="roleBannerIcon" data-lucide="shield-check" class="w-6 h-6"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <h2 id="roleBannerTitle" class="font-bold text-base sm:text-lg">Selamat Datang</h2>
+              <span id="roleBannerTag" class="px-2.5 py-0.5 rounded-full bg-white/20 text-[11px] font-semibold">Otoritas</span>
+            </div>
+            <p id="roleBannerDesc" class="text-xs sm:text-sm text-emerald-100 mt-0.5">Deskripsi tugas peran aktif.</p>
+          </div>
+        </div>
+        <div id="roleBannerAction" class="shrink-0"></div>
+      </div>
+
+      <!-- TAB 1: RINGKASAN & ANALITIK -->
+      <section id="tabContent-overview" class="space-y-6">
+        <!-- KPI Cards -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+            <div class="flex items-center justify-between text-slate-500 text-xs font-semibold uppercase">
+              <span>Total Anggaran RAB</span>
+              <i data-lucide="wallet" class="w-4 h-4 text-emerald-600"></i>
+            </div>
+            <div id="kpiTotalBudget" class="text-2xl font-extrabold text-slate-900 mt-2">Rp 0</div>
+            <div id="kpiTotalCount" class="text-xs text-slate-500 mt-1">0 dokumen proyek</div>
+          </div>
+
+          <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+            <div class="flex items-center justify-between text-slate-500 text-xs font-semibold uppercase">
+              <span>Disahkan Kasun (ACC)</span>
+              <i data-lucide="check-circle-2" class="w-4 h-4 text-blue-600"></i>
+            </div>
+            <div id="kpiApprovedBudget" class="text-2xl font-extrabold text-blue-700 mt-2">Rp 0</div>
+            <div id="kpiApprovedCount" class="text-xs text-slate-500 mt-1">0 proyek disetujui</div>
+          </div>
+
+          <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+            <div class="flex items-center justify-between text-slate-500 text-xs font-semibold uppercase">
+              <span>Dana Didistribusikan</span>
+              <i data-lucide="banknote" class="w-4 h-4 text-teal-600"></i>
+            </div>
+            <div id="kpiDisbursedBudget" class="text-2xl font-extrabold text-teal-700 mt-2">Rp 0</div>
+            <div id="kpiDisbursedCount" class="text-xs text-slate-500 mt-1">Oleh Bendahara Dusun</div>
+          </div>
+
+          <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+            <div class="flex items-center justify-between text-slate-500 text-xs font-semibold uppercase">
+              <span>Dalam Antrean Proses</span>
+              <i data-lucide="clock" class="w-4 h-4 text-amber-600"></i>
+            </div>
+            <div id="kpiPendingCount" class="text-2xl font-extrabold text-amber-600 mt-2">0 Dokumen</div>
+            <div class="text-xs text-slate-500 mt-1">RW, Kasun & Pencairan</div>
+          </div>
+        </div>
+
+        <!-- Rekap 4 Sumber Dana & Antrean Tugas Role -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div class="lg:col-span-5 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+            <h3 class="font-bold text-slate-900 text-base flex items-center gap-2">
+              <i data-lucide="pie-chart" class="w-4 h-4 text-emerald-600"></i>
+              <span>Rekapitulasi 4 Sumber Dana</span>
+            </h3>
+            <p class="text-xs text-slate-500 mt-0.5 mb-5">Distribusi anggaran berdasarkan asal pendanaan dusun</p>
+            <div id="fundingSummaryContainer" class="space-y-4"></div>
+          </div>
+
+          <div class="lg:col-span-7 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+            <div class="flex items-center justify-between mb-4">
+              <div>
+                <h3 class="font-bold text-slate-900 text-base flex items-center gap-2">
+                  <i data-lucide="badge-check" class="w-4 h-4 text-emerald-600"></i>
+                  <span>RAB Disahkan Semua Jenjang (Siap / Sedang Dikerjakan)</span>
+                </h3>
+                <p class="text-xs text-slate-500 mt-0.5">Pantauan dokumen yang telah mendapat ACC RW & ACC Terakhir Kasun</p>
+              </div>
+              <button onclick="switchTab('rab')" class="text-xs font-semibold text-emerald-700 hover:underline">Lihat Semua →</button>
+            </div>
+            <div id="approvedOverviewList" class="space-y-3"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 2: DAFTAR PENGAJUAN, APPROVAL & DISTRIBUSI DANA -->
+      <section id="tabContent-rab" class="hidden space-y-5">
+        <!-- Filter Bar -->
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div class="relative flex-1">
+              <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2"></i>
+              <input id="searchRabInput" oninput="renderRabList()" type="text" placeholder="Cari kode RAB, judul proyek, atau lokasi RT/RW..."
+                class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-500 outline-none" />
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <select id="filterFundingSelect" onchange="renderRabList()" class="px-3 py-2.5 rounded-xl border border-slate-200 text-xs font-medium bg-white text-slate-700 outline-none">
+                <option value="ALL">Semua Sumber Dana</option>
+                <option value="Dana Desa">Dana Desa</option>
+                <option value="Dana Dusun">Dana Dusun</option>
+                <option value="Swasembada Warga Dusun">Swasembada Warga Dusun</option>
+                <option value="Lain-lain">Lain-lain</option>
+              </select>
+              <button id="btnNewRabTop" onclick="openRabFormModal()" class="hidden px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1.5 shadow-sm">
+                <i data-lucide="plus" class="w-4 h-4"></i>
+                <span>Buat Pengajuan RAB</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Pill Filter Status -->
+          <div id="statusFilterPills" class="flex items-center gap-2 overflow-x-auto pt-1 pb-0.5"></div>
+        </div>
+
+        <!-- List Cards -->
+        <div id="rabListContainer" class="grid grid-cols-1 gap-4"></div>
+      </section>
+
+      <!-- TAB 3: JADWAL PERENCANAAN PROYEK (GANTT TIMELINE) -->
+      <section id="tabContent-schedule" class="hidden space-y-5">
+        <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+            <div>
+              <h3 class="font-bold text-slate-900 text-lg">Jadwal Perencanaan & Progres Fisik Proyek Dusun</h3>
+              <p class="text-xs text-slate-500 mt-0.5">Visualisasi lini masa pengerjaan proyek serta capaian realisasi lapangan</p>
+            </div>
+            <div class="flex items-center gap-3 text-xs">
+              <span class="inline-flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-emerald-500"></span> Disahkan</span>
+              <span class="inline-flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-amber-400"></span> Proses Approval</span>
+            </div>
+          </div>
+          <div id="timelineContainer" class="space-y-4"></div>
+        </div>
+      </section>
+
+      <!-- TAB 4: MANAJEMEN PENGGUNA (KHUSUS ADMINISTRATOR) -->
+      <section id="tabContent-users" class="hidden space-y-5">
+        <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+            <div>
+              <h3 class="font-bold text-slate-900 text-lg">Manajemen Pengguna & Otoritas Perangkat Dusun</h3>
+              <p class="text-xs text-slate-500 mt-0.5">Kelola akun Administrator, Sie Pembangunan, Ketua RW, Kepala Dusun, dan Bendahara Dusun</p>
+            </div>
+            <button onclick="openUserFormModal()" class="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1.5">
+              <i data-lucide="user-plus" class="w-4 h-4"></i>
+              <span>Tambah Pengguna Baru</span>
+            </button>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse text-sm">
+              <thead>
+                <tr class="border-b border-slate-200 text-xs uppercase text-slate-500 bg-slate-50">
+                  <th class="py-3 px-4 rounded-tl-xl">Nama Lengkap</th>
+                  <th class="py-3 px-4">Username / Email</th>
+                  <th class="py-3 px-4">Peran (Role)</th>
+                  <th class="py-3 px-4">Wilayah</th>
+                  <th class="py-3 px-4">Status</th>
+                  <th class="py-3 px-4 text-right rounded-tr-xl">Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="usersTableBody" class="divide-y divide-slate-100"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- ==================== MODAL 1: FORM BUAT / EDIT RAB ==================== -->
+  <div id="rabFormModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+    <div class="bg-white rounded-3xl max-w-4xl w-full shadow-2xl overflow-hidden my-8">
+      <div class="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
+        <div class="flex items-center gap-2.5">
+          <i data-lucide="file-plus-2" class="w-5 h-5 text-emerald-400"></i>
+          <h3 id="rabFormModalTitle" class="font-bold text-base">Buat Pengajuan RAB Baru</h3>
+        </div>
+        <button onclick="closeRabFormModal()" class="text-slate-400 hover:text-white p-1">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <form id="rabForm" onsubmit="handleSaveRab(event)" class="p-6 space-y-5 max-h-[82vh] overflow-y-auto custom-scrollbar">
+        <input type="hidden" id="editRabId" />
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="md:col-span-2">
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Judul Proyek / Kegiatan Dusun *</label>
+            <input id="rabJudul" type="text" required placeholder="Contoh: Pembangunan Talud Penahan Tanah RT 03"
+              class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-emerald-500 outline-none" />
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Bidang Kegiatan *</label>
+            <select id="rabBidang" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm bg-white outline-none">
+              <option>Infrastruktur Jalan & Jembatan</option>
+              <option>Drainase & Sanitasi Lingkungan</option>
+              <option>Penerangan Jalan Umum (PJU)</option>
+              <option>Sarana Air Bersih & Irigasi</option>
+              <option>Fasilitas Umum & Posyandu</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Lokasi RT / RW *</label>
+            <input id="rabLokasi" type="text" required placeholder="Contoh: RT 03 / RW 01 Dusun Sejo"
+              class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm outline-none" />
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Sumber Dana *</label>
+            <select id="rabSumberDana" onchange="toggleFundingNoteField()" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm bg-white outline-none">
+              <option value="Dana Desa">Dana Desa</option>
+              <option value="Dana Dusun">Dana Dusun</option>
+              <option value="Swasembada Warga Dusun">Swasembada Warga Dusun</option>
+              <option value="Lain-lain">Lain-lain</option>
+            </select>
+          </div>
+
+          <div id="fundingNoteWrapper" class="hidden">
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Keterangan Sumber Dana (Lain-lain)</label>
+            <input id="rabFundingNote" type="text" placeholder="Contoh: Bantuan CSR / Donatur / Hibah"
+              class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm outline-none" />
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Rencana Tanggal Mulai *</label>
+            <input id="rabMulai" type="date" required class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm outline-none" />
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Rencana Tanggal Selesai *</label>
+            <input id="rabSelesai" type="date" required class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm outline-none" />
+          </div>
+
+          <div class="md:col-span-2">
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Deskripsi Teknis & Volume Pekerjaan</label>
+            <textarea id="rabDeskripsi" rows="2" placeholder="Jelaskan spesifikasi teknis pekerjaan..."
+              class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm outline-none"></textarea>
+          </div>
+        </div>
+
+        <!-- Rincian Item RAB -->
+        <div class="border-t border-slate-200 pt-4">
+          <div class="flex items-center justify-between mb-3">
+            <h4 class="font-bold text-sm text-slate-800">Rincian Anggaran Biaya (Material, Upah & Alat)</h4>
+            <button type="button" onclick="addRabItemRow()" class="px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 text-xs font-semibold flex items-center gap-1">
+              <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+              <span>Tambah Item</span>
+            </button>
+          </div>
+
+          <div class="overflow-x-auto border border-slate-200 rounded-xl">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-slate-50 text-slate-600 uppercase border-b border-slate-200">
+                <tr>
+                  <th class="p-2.5">Uraian Barang / Jasa</th>
+                  <th class="p-2.5 w-32">Kategori</th>
+                  <th class="p-2.5 w-20">Vol</th>
+                  <th class="p-2.5 w-24">Satuan</th>
+                  <th class="p-2.5 w-36">Harga Satuan (Rp)</th>
+                  <th class="p-2.5 w-32 text-right">Subtotal</th>
+                  <th class="p-2.5 w-10"></th>
+                </tr>
+              </thead>
+              <tbody id="rabItemsTableBody" class="divide-y divide-slate-100"></tbody>
+              <tfoot class="bg-slate-50 font-bold text-slate-900 border-t border-slate-200">
+                <tr>
+                  <td colspan="5" class="p-3 text-right uppercase text-xs">Total Estimasi Anggaran RAB:</td>
+                  <td id="rabFormTotalDisplay" class="p-3 text-right text-sm text-emerald-700">Rp 0</td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-end gap-2.5 pt-4 border-t border-slate-200">
+          <button type="button" onclick="closeRabFormModal()" class="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-xs font-semibold hover:bg-slate-50">Batal</button>
+          <button type="submit" onclick="document.getElementById('rabForm').dataset.submitMode='Draft'" class="px-4 py-2.5 rounded-xl bg-slate-700 hover:bg-slate-800 text-white text-xs font-semibold">
+            Simpan sebagai Draft
+          </button>
+          <button type="submit" onclick="document.getElementById('rabForm').dataset.submitMode='Menunggu RW'" class="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1.5">
+            <i data-lucide="send" class="w-3.5 h-3.5"></i>
+            <span>Ajukan ke Ketua RW (Approval 1)</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL 2: DETAIL, APPROVAL, DISTRIBUSI & CETAK ==================== -->
+  <div id="rabDetailModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+    <div class="bg-white rounded-3xl max-w-4xl w-full shadow-2xl overflow-hidden my-8">
+      <div class="px-6 py-4 bg-slate-900 text-white flex items-center justify-between no-print">
+        <div class="flex items-center gap-2.5">
+          <i data-lucide="file-check-2" class="w-5 h-5 text-emerald-400"></i>
+          <h3 class="font-bold text-base">Detail Dokumen RAB & Lembar Otorisasi</h3>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="window.print()" class="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1.5">
+            <i data-lucide="printer" class="w-3.5 h-3.5"></i>
+            <span>Cetak Lembar Pengesahan</span>
+          </button>
+          <button onclick="closeRabDetailModal()" class="text-slate-400 hover:text-white p-1">
+            <i data-lucide="x" class="w-5 h-5"></i>
+          </button>
+        </div>
+      </div>
+
+      <div id="rabDetailBody" class="p-6 max-h-[82vh] overflow-y-auto custom-scrollbar space-y-6"></div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL 3: KONFIGURASI SUPABASE & SQL ==================== -->
+  <div id="supabaseModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+    <div class="bg-white rounded-3xl max-w-2xl w-full shadow-2xl overflow-hidden my-8">
+      <div class="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <i data-lucide="database" class="w-5 h-5 text-emerald-400"></i>
+          <h3 class="font-bold text-base">Koneksi Database Supabase Live</h3>
+        </div>
+        <button onclick="closeSupabaseModal()" class="text-slate-400 hover:text-white p-1">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+      <div class="p-6 space-y-4">
+        <div class="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 leading-relaxed">
+          <strong>Petunjuk:</strong> Pastikan Anda telah menjalankan script SQL pada file <code>supabase_schema.sql</code> di menu <strong>SQL Editor</strong> proyek Supabase Anda agar tabel <code>app_users</code>, <code>rab_projects</code>, <code>rab_items</code>, dan <code>rab_approval_logs</code> tersedia.
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Supabase Project URL</label>
+          <input id="inputSupabaseUrl" type="url" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs font-mono" />
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Supabase Publishable / Anon Key</label>
+          <input id="inputSupabaseKey" type="text" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs font-mono" />
+        </div>
+
+        <div class="flex flex-wrap items-center justify-between gap-2 pt-2">
+          <button type="button" onclick="resetLocalCache()" class="px-3.5 py-2 rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-semibold">
+            Reset Cache Lokal
+          </button>
+          <div class="flex items-center gap-2">
+            <button type="button" onclick="closeSupabaseModal()" class="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600">Tutup</button>
+            <button type="button" onclick="saveAndConnectSupabase()" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold">
+              Hubungkan & Sinkronisasi
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL 4: TAMBAH / EDIT USER (ADMIN) ==================== -->
+  <div id="userFormModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-md w-full shadow-2xl overflow-hidden">
+      <div class="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
+        <h3 id="userFormTitle" class="font-bold text-base">Tambah Pengguna Baru</h3>
+        <button onclick="closeUserFormModal()" class="text-slate-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <form onsubmit="handleSaveUser(event)" class="p-6 space-y-4">
+        <input type="hidden" id="editUserId" />
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Nama Lengkap & Gelar *</label>
+          <input id="userFullName" type="text" required class="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm" />
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Username *</label>
+            <input id="userUsername" type="text" required class="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Kata Sandi *</label>
+            <input id="userPassword" type="text" required class="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm" />
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Email *</label>
+          <input id="userEmail" type="email" required class="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm" />
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Peran (Role) *</label>
+            <select id="userRole" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white">
+              <option value="sie_pembangunan">Sie Pembangunan</option>
+              <option value="rw">Ketua RW (Approval 1)</option>
+              <option value="kasun">Kepala Dusun (Approval Terakhir)</option>
+              <option value="bendahara">Bendahara Dusun (Distribusi Dana)</option>
+              <option value="admin">Administrator</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Wilayah / Jabatan *</label>
+            <input id="userWilayah" type="text" required value="Dusun Sejo" class="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm" />
+          </div>
+        </div>
+        <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
+          <button type="button" onclick="closeUserFormModal()" class="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold">Batal</button>
+          <button type="submit" class="px-4 py-2 rounded-xl bg-emerald-600 text-white text-xs font-semibold">Simpan Akun</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toastContainer" class="fixed bottom-5 right-5 z-50 space-y-2 no-print"></div>
+
+  <!-- ==================== JAVASCRIPT APPLICATION LOGIC ==================== -->
+  <script>
+    // =========================================================================
+    // 0. KONFIGURASI LANGSUNG SUPABASE
+    // =========================================================================
+    const DEFAULT_SUPABASE_URL = 'https://gtpwcoipigqyjmwbupvo.supabase.co';
+    const DEFAULT_SUPABASE_ANON_KEY = 'sb_publishable_BWo5yVYGxCOLwFw99u56Og_Em9kEbK_';
+
+    const ROLE_META = {
+      admin: {
+        label: 'Administrator Sistem',
+        badgeClass: 'bg-slate-800 text-white',
+        desc: 'Akses penuh pengelolaan akun perangkat dusun, pemantauan seluruh RAB, serta audit database.'
+      },
+      sie_pembangunan: {
+        label: 'Sie Pembangunan (Pembuat RAB)',
+        badgeClass: 'bg-blue-100 text-blue-800',
+        desc: 'Menyusun pengajuan RAB & jadwal proyek, memantau RAB disahkan, serta memperbarui progres fisik.'
+      },
+      rw: {
+        label: 'Ketua RW (Approval 1)',
+        badgeClass: 'bg-amber-100 text-amber-800',
+        desc: 'Memverifikasi usulan RAB dari Sie Pembangunan sebelum diteruskan ke Kepala Dusun.'
+      },
+      kasun: {
+        label: 'Kepala Dusun / Kasun (Approval Terakhir)',
+        badgeClass: 'bg-purple-100 text-purple-800',
+        desc: 'Memberikan pengesahan akhir (ACC Terakhir) sebelum dana dicairkan oleh Bendahara Dusun.'
+      },
+      bendahara: {
+        label: 'Bendahara Dusun (Pendistribusian Dana)',
+        badgeClass: 'bg-teal-100 text-teal-800',
+        desc: 'Melakukan pendistribusian & pencairan dana proyek untuk RAB yang telah mendapat ACC Terakhir Kasun.'
+      }
+    };
+
+    const INITIAL_USERS = [
+      { id: 'u-1', username: 'admin', email: 'admin@dusunsejo.desa.id', password_hash: 'admin123', full_name: 'Siti Aminah, S.Kom', role: 'admin', wilayah: 'Sekretariat Dusun Sejo', is_active: true },
+      { id: 'u-2', username: 'sie_pembangunan', email: 'pembangunan@dusunsejo.desa.id', password_hash: 'sie123', full_name: 'Bpk. Hendra Wijaya', role: 'sie_pembangunan', wilayah: 'Sie Pembangunan Dusun Sejo', is_active: true },
+      { id: 'u-3', username: 'rw01', email: 'rw01@dusunsejo.desa.id', password_hash: 'rw123', full_name: 'Bpk. H. Sutrisno', role: 'rw', wilayah: 'Ketua RW 01 Dusun Sejo', is_active: true },
+      { id: 'u-4', username: 'kasun', email: 'kasun@dusunsejo.desa.id', password_hash: 'kasun123', full_name: 'Bpk. Drs. Bambang Sudjatmiko', role: 'kasun', wilayah: 'Kepala Dusun Sejo', is_active: true },
+      { id: 'u-5', username: 'bendahara', email: 'bendahara@dusunsejo.desa.id', password_hash: 'bendahara123', full_name: 'Ibu Hj. Ratna Kumalasari, S.E.', role: 'bendahara', wilayah: 'Bendahara Dusun Sejo', is_active: true }
+    ];
+
+    const INITIAL_PROJECTS = [
+      {
+        id: 'rab-001',
+        kode_rab: 'RAB/DSN-SJ/2026/001',
+        judul_proyek: 'Pavingisasi Jalan Lingkungan Gang Melati RT 02',
+        bidang_kegiatan: 'Infrastruktur Jalan & Jembatan',
+        lokasi_rt_rw: 'RT 02 / RW 01 Dusun Sejo',
+        sumber_dana: 'Dana Desa',
+        funding_note: '',
+        deskripsi: 'Pemasangan paving block K-300 tebal 8 cm sepanjang 145 meter x lebar 3 meter beserta kanstin pengunci jalan.',
+        tanggal_mulai: '2026-11-02',
+        tanggal_selesai: '2026-11-28',
+        total_anggaran: 54505000,
+        status_approval: 'Disetujui',
+        status_dana: 'Sudah Didistribusikan',
+        dana_tersalurkan: 54505000,
+        metode_penyaluran: 'Transfer Rekening TPK Dusun',
+        disbursed_by: 'Ibu Hj. Ratna Kumalasari, S.E.',
+        disbursed_at: '2026-11-01T10:15:00Z',
+        catatan_bendahara: 'Dana cair 100% sesuai RAB yang disahkan Kasun.',
+        progres_fisik: 75,
+        dibuat_oleh: 'Bpk. Hendra Wijaya',
+        approved_rw_by: 'Bpk. H. Sutrisno',
+        approved_kasun_by: 'Bpk. Drs. Bambang Sudjatmiko',
+        items: [
+          { id: 'i-1', uraian: 'Paving Block Abu-abu K-300 (Tebal 8 cm)', kategori: 'Material', volume: 435, satuan: 'm2', harga_satuan: 85000 },
+          { id: 'i-2', uraian: 'Pasir Urug & Abu Batu Alas Paving', kategori: 'Material', volume: 28, satuan: 'm3', harga_satuan: 240000 },
+          { id: 'i-3', uraian: 'Kanstin Beton Pengunci Tepi', kategori: 'Material', volume: 290, satuan: 'buah', harga_satuan: 25000 },
+          { id: 'i-4', uraian: 'Upah Tukang Pasang Paving & Pekerja', kategori: 'Upah Tenaga', volume: 18, satuan: 'HOK', harga_satuan: 140000 },
+          { id: 'i-5', uraian: 'Sewa Mesin Stamper Pemadat Tanah', kategori: 'Sewa Alat', volume: 6, satuan: 'hari', harga_satuan: 175000 }
+        ],
+        logs: [
+          { peran: 'Sie Pembangunan', nama_pejabat: 'Bpk. Hendra Wijaya', aksi: 'Diajukan ke Ketua RW', catatan: 'Hasil musyawarah warga RT 02.', created_at: '2026-10-25T09:00:00Z' },
+          { peran: 'Ketua RW', nama_pejabat: 'Bpk. H. Sutrisno', aksi: 'Disetujui RW (Diteruskan ke Kasun)', catatan: 'Volume sesuai lapangan.', created_at: '2026-10-27T14:20:00Z' },
+          { peran: 'Kepala Dusun', nama_pejabat: 'Bpk. Drs. Bambang Sudjatmiko', aksi: 'ACC Terakhir Disetujui Kasun', catatan: 'Disetujui untuk segera dikerjakan.', created_at: '2026-10-29T11:05:00Z' },
+          { peran: 'Bendahara Dusun', nama_pejabat: 'Ibu Hj. Ratna Kumalasari, S.E.', aksi: 'Dana Didistribusikan (Rp 54.505.000)', catatan: 'Dana cair 100% ke rekening TPK.', created_at: '2026-11-01T10:15:00Z' }
+        ]
+      },
+      {
+        id: 'rab-002',
+        kode_rab: 'RAB/DSN-SJ/2026/002',
+        judul_proyek: 'Normalisasi & Betonisasi Saluran Drainase RW 01',
+        bidang_kegiatan: 'Drainase & Sanitasi Lingkungan',
+        lokasi_rt_rw: 'RT 01 - RT 03 / RW 01 Dusun Sejo',
+        sumber_dana: 'Dana Dusun',
+        funding_note: '',
+        deskripsi: 'Pembangunan saluran U-Ditch pracetak 40x40 cm sepanjang 90 meter.',
+        tanggal_mulai: '2026-12-01',
+        tanggal_selesai: '2026-12-22',
+        total_anggaran: 31040000,
+        status_approval: 'Menunggu Kasun',
+        status_dana: 'Belum Dicairkan',
+        dana_tersalurkan: 0,
+        progres_fisik: 0,
+        dibuat_oleh: 'Bpk. Hendra Wijaya',
+        approved_rw_by: 'Bpk. H. Sutrisno',
+        approved_kasun_by: null,
+        items: [
+          { id: 'i-6', uraian: 'Beton Pracetak U-Ditch 40x40x120 cm', kategori: 'Material', volume: 75, satuan: 'unit', harga_satuan: 310000 },
+          { id: 'i-7', uraian: 'Semen Portland 50 Kg & Pasir Pasang', kategori: 'Material', volume: 25, satuan: 'sak', harga_satuan: 68000 },
+          { id: 'i-8', uraian: 'Upah Galian Tanah & Pemasangan U-Ditch', kategori: 'Upah Tenaga', volume: 24, satuan: 'HOK', harga_satuan: 135000 },
+          { id: 'i-9', uraian: 'Sewa Mini Excavator / Crane Angkat', kategori: 'Sewa Alat', volume: 3, satuan: 'hari', harga_satuan: 950000 }
+        ],
+        logs: [
+          { peran: 'Sie Pembangunan', nama_pejabat: 'Bpk. Hendra Wijaya', aksi: 'Diajukan ke Ketua RW', catatan: 'Prioritas penanganan genangan air.', created_at: '2026-11-18T08:30:00Z' },
+          { peran: 'Ketua RW', nama_pejabat: 'Bpk. H. Sutrisno', aksi: 'Disetujui RW (Diteruskan ke Kasun)', catatan: 'Sangat mendesak. Mohon ACC Kasun.', created_at: '2026-11-20T16:10:00Z' }
+        ]
+      },
+      {
+        id: 'rab-003',
+        kode_rab: 'RAB/DSN-SJ/2026/003',
+        judul_proyek: 'Pengadaan 10 Titik PJU Tenaga Surya Poros Dusun',
+        bidang_kegiatan: 'Penerangan Jalan Umum (PJU)',
+        lokasi_rt_rw: 'Poros Utama Dusun Sejo',
+        sumber_dana: 'Lain-lain',
+        funding_note: 'Bantuan CSR PT. Sumber Makmur & Donatur',
+        deskripsi: 'Pemasangan lampu jalan LED Solar Cell 100W lengkap dengan tiang galvanis 6 meter.',
+        tanggal_mulai: '2026-12-12',
+        tanggal_selesai: '2026-12-29',
+        total_anggaran: 26500000,
+        status_approval: 'Disetujui',
+        status_dana: 'Menunggu Distribusi',
+        dana_tersalurkan: 0,
+        progres_fisik: 15,
+        dibuat_oleh: 'Bpk. Hendra Wijaya',
+        approved_rw_by: 'Bpk. H. Sutrisno',
+        approved_kasun_by: 'Bpk. Drs. Bambang Sudjatmiko',
+        items: [
+          { id: 'i-10', uraian: 'Paket Lampu PJU Solar Cell All-in-One 100W', kategori: 'Material', volume: 10, satuan: 'set', harga_satuan: 1400000 },
+          { id: 'i-11', uraian: 'Tiang PJU Oktagonal Galvanis 6 Meter', kategori: 'Material', volume: 10, satuan: 'batang', harga_satuan: 1100000 },
+          { id: 'i-12', uraian: 'Upah Pengecoran Umpak & Instalasi Tiang', kategori: 'Upah Tenaga', volume: 10, satuan: 'HOK', harga_satuan: 150000 }
+        ],
+        logs: [
+          { peran: 'Sie Pembangunan', nama_pejabat: 'Bpk. Hendra Wijaya', aksi: 'Diajukan ke Ketua RW', catatan: 'Pendanaan bersumber dari hibah CSR.', created_at: '2026-11-12T10:00:00Z' },
+          { peran: 'Ketua RW', nama_pejabat: 'Bpk. H. Sutrisno', aksi: 'Disetujui RW (Diteruskan ke Kasun)', catatan: 'Titik tiang sudah disepakati warga.', created_at: '2026-11-15T13:45:00Z' },
+          { peran: 'Kepala Dusun', nama_pejabat: 'Bpk. Drs. Bambang Sudjatmiko', aksi: 'ACC Terakhir Disetujui Kasun', catatan: 'ACC Final. Teruskan ke Bendahara Dusun.', created_at: '2026-11-19T09:20:00Z' }
+        ]
+      }
+    ];
+
+    // =========================================================================
+    // 2. STATE APLIKASI
+    // =========================================================================
+    let supabaseClient = null;
+    let isLiveSupabase = false;
+    let currentUser = null;
+    let appUsers = [];
+    let rabProjects = [];
+    let activeStatusFilter = 'ALL';
+
+    const formatRupiah = (num) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(Number(num) || 0);
+
+    function showToast(message, type = 'success') {
+      const container = document.getElementById('toastContainer');
+      const el = document.createElement('div');
+      const colors = type === 'error'
+        ? 'bg-rose-600 text-white'
+        : type === 'warning'
+        ? 'bg-amber-600 text-white'
+        : 'bg-slate-900 text-white border border-emerald-500/40';
+      el.className = `${colors} px-4 py-3 rounded-xl shadow-lg text-xs font-medium flex items-center gap-2 transition-all`;
+      el.innerHTML = `<i data-lucide="${type === 'error' ? 'alert-triangle' : 'check-circle'}" class="w-4 h-4 shrink-0"></i><span>${message}</span>`;
+      container.appendChild(el);
+      lucide.createIcons();
+      setTimeout(() => el.remove(), 3500);
+    }
+
+    // =========================================================================
+    // 3. PENYIMPANAN LOKAL & SINKRONISASI SUPABASE
+    // =========================================================================
+    function loadLocalData() {
+      try {
+        const storedUsers = JSON.parse(localStorage.getItem('sirab_users_v2') || 'null');
+        if (Array.isArray(storedUsers) && storedUsers.length > 0) {
+          appUsers = storedUsers;
+          INITIAL_USERS.forEach(defU => {
+            if (!appUsers.some(u => u.username === defU.username)) appUsers.push(defU);
+          });
+        } else {
+          appUsers = JSON.parse(JSON.stringify(INITIAL_USERS));
+        }
+        saveLocalUsers();
+
+        const storedProjects = JSON.parse(localStorage.getItem('sirab_projects_v2') || 'null');
+        if (Array.isArray(storedProjects) && storedProjects.length > 0) {
+          rabProjects = storedProjects;
+        } else {
+          rabProjects = JSON.parse(JSON.stringify(INITIAL_PROJECTS));
+          saveLocalProjects();
+        }
+      } catch (e) {
+        appUsers = JSON.parse(JSON.stringify(INITIAL_USERS));
+        rabProjects = JSON.parse(JSON.stringify(INITIAL_PROJECTS));
+      }
+    }
+
+    function saveLocalUsers() {
+      localStorage.setItem('sirab_users_v2', JSON.stringify(appUsers));
+    }
+
+    function saveLocalProjects() {
+      localStorage.setItem('sirab_projects_v2', JSON.stringify(rabProjects));
+    }
+
+    function resetLocalCache() {
+      localStorage.removeItem('sirab_users_v2');
+      localStorage.removeItem('sirab_projects_v2');
+      localStorage.removeItem('sirab_sb_url');
+      localStorage.removeItem('sirab_sb_key');
+      loadLocalData();
+      showToast('Cache lokal berhasil direset. Memuat ulang...');
+      setTimeout(() => location.reload(), 800);
+    }
+
+    async function initSupabaseConnection() {
+      const url = localStorage.getItem('sirab_sb_url') || DEFAULT_SUPABASE_URL;
+      const key = localStorage.getItem('sirab_sb_key') || DEFAULT_SUPABASE_ANON_KEY;
+
+      document.getElementById('inputSupabaseUrl').value = url;
+      document.getElementById('inputSupabaseKey').value = key;
+
+      const badge = document.getElementById('loginDbStatusBadge');
+      const subtext = document.getElementById('loginDbSubtext');
+      const headerBadge = document.getElementById('headerDbBadge');
+
+      if (!url || !key || !window.supabase) {
+        isLiveSupabase = false;
+        loadLocalData();
+        badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-300"></span><span>Mode Penyimpanan Lokal</span>`;
+        return;
+      }
+
+      try {
+        supabaseClient = window.supabase.createClient(url, key);
+        const { error } = await supabaseClient.from('app_users').select('id').limit(1);
+
+        if (error) {
+          throw error;
+        }
+
+        isLiveSupabase = true;
+        badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-300"></span><span>Terhubung ke Supabase Live</span>`;
+        subtext.textContent = 'Database PostgreSQL aktif & tersinkronisasi.';
+        if (headerBadge) {
+          headerBadge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span><span>Supabase Live</span>`;
+        }
+        await fetchAllFromSupabase();
+      } catch (err) {
+        isLiveSupabase = false;
+        loadLocalData();
+        badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-300"></span><span>Mode Penyimpanan Lokal Aktif</span>`;
+        subtext.textContent = 'Catatan: Jalankan script supabase_schema.sql di SQL Editor Supabase agar database aktif.';
+        if (headerBadge) {
+          headerBadge.className = 'hidden sm:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200';
+          headerBadge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span><span>Mode Lokal</span>`;
+        }
+      }
+    }
+
+    async function fetchAllFromSupabase() {
+      if (!isLiveSupabase || !supabaseClient) return;
+      try {
+        const [{ data: usersData }, { data: projData }, { data: itemsData }, { data: logsData }] = await Promise.all([
+          supabaseClient.from('app_users').select('*').order('created_at', { ascending: true }),
+          supabaseClient.from('rab_projects').select('*').order('created_at', { ascending: false }),
+          supabaseClient.from('rab_items').select('*'),
+          supabaseClient.from('rab_approval_logs').select('*').order('created_at', { ascending: true })
+        ]);
+
+        if (usersData && usersData.length > 0) {
+          appUsers = usersData;
+        } else {
+          appUsers = JSON.parse(JSON.stringify(INITIAL_USERS));
+        }
+
+        if (projData) {
+          rabProjects = projData.map(p => ({
+            ...p,
+            items: (itemsData || []).filter(i => i.rab_id === p.id),
+            logs: (logsData || []).filter(l => l.rab_id === p.id)
+          }));
+        }
+      } catch (e) {
+        console.error('Error fetching Supabase data:', e);
+      }
+    }
+
+    function openSupabaseModal() {
+      document.getElementById('supabaseModal').classList.remove('hidden');
+      lucide.createIcons();
+    }
+
+    function closeSupabaseModal() {
+      document.getElementById('supabaseModal').classList.add('hidden');
+    }
+
+    async function saveAndConnectSupabase() {
+      const url = document.getElementById('inputSupabaseUrl').value.trim();
+      const key = document.getElementById('inputSupabaseKey').value.trim();
+      if (!url || !key) {
+        showToast('URL dan Key Supabase wajib diisi.', 'error');
+        return;
+      }
+      localStorage.setItem('sirab_sb_url', url);
+      localStorage.setItem('sirab_sb_key', key);
+      await initSupabaseConnection();
+      closeSupabaseModal();
+      if (isLiveSupabase) {
+        showToast('Berhasil terhubung ke Supabase Live!');
+        if (currentUser) refreshAllViews();
+      } else {
+        showToast('Koneksi gagal: Pastikan tabel SQL sudah dijalankan di Supabase.', 'warning');
+      }
+    }
+
+    // =========================================================================
+    // 4. AUTENTIKASI & LOGIN
+    // =========================================================================
+    function togglePasswordVisibility() {
+      const input = document.getElementById('loginPassword');
+      input.type = input.type === 'password' ? 'text' : 'password';
+    }
+
+    async function handleLoginSubmit(e) {
+      e.preventDefault();
+      const identifier = document.getElementById('loginUsername').value.trim().toLowerCase();
+      const password = document.getElementById('loginPassword').value.trim();
+      const errBox = document.getElementById('loginErrorAlert');
+      const errText = document.getElementById('loginErrorText');
+      const btnSubmit = document.getElementById('btnLoginSubmit');
+
+      errBox.classList.add('hidden');
+      btnSubmit.disabled = true;
+      btnSubmit.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i><span>Memverifikasi Akun...</span>`;
+      lucide.createIcons();
+
+      try {
+        let matchedUser = null;
+
+        if (isLiveSupabase && supabaseClient) {
+          const { data, error } = await supabaseClient
+            .from('app_users')
+            .select('*')
+            .or(`username.ilike.${identifier},email.ilike.${identifier}`);
+
+          if (!error && data && data.length > 0) {
+            matchedUser = data.find(u => (u.password_hash || '').trim() === password) || null;
+          } else {
+            matchedUser = INITIAL_USERS.find(
+              u => (u.username.toLowerCase() === identifier || u.email.toLowerCase() === identifier) && u.password_hash === password
+            ) || null;
+          }
+        } else {
+          if (!appUsers || appUsers.length === 0) loadLocalData();
+          matchedUser = appUsers.find(
+            u => (u.username.toLowerCase() === identifier || u.email.toLowerCase() === identifier) && u.password_hash === password
+          ) || null;
+        }
+
+        if (!matchedUser) {
+          errText.textContent = 'Username/Email atau Kata Sandi tidak cocok. Periksa kembali akun Anda.';
+          errBox.classList.remove('hidden');
+          return;
+        }
+
+        if (matchedUser.is_active === false) {
+          errText.textContent = 'Akun Anda sedang dinonaktifkan oleh Administrator.';
+          errBox.classList.remove('hidden');
+          return;
+        }
+
+        completeLogin(matchedUser);
+      } catch (err) {
+        errText.textContent = err.message || 'Terjadi kesalahan saat masuk.';
+        errBox.classList.remove('hidden');
+      } finally {
+        btnSubmit.disabled = false;
+        btnSubmit.innerHTML = `<i data-lucide="log-in" class="w-4 h-4"></i><span>Masuk ke Dashboard</span>`;
+        lucide.createIcons();
+      }
+    }
+
+    function completeLogin(user) {
+      currentUser = user;
+      sessionStorage.setItem('sirab_session_user', JSON.stringify(user));
+
+      document.getElementById('loginScreen').classList.add('hidden');
+      document.getElementById('mainApp').classList.remove('hidden');
+
+      const meta = ROLE_META[user.role] || ROLE_META.sie_pembangunan;
+      document.getElementById('navUserName').textContent = user.full_name;
+      document.getElementById('navUserRole').textContent = meta.label;
+      document.getElementById('navUserAvatar').textContent = user.full_name.slice(0, 2).toUpperCase();
+
+      // Tampilkan tab manajemen user khusus admin
+      const tabUsers = document.getElementById('tabBtn-users');
+      if (user.role === 'admin') {
+        tabUsers.classList.remove('hidden');
+      } else {
+        tabUsers.classList.add('hidden');
+      }
+
+      // Tombol buat RAB untuk Sie Pembangunan & Admin
+      const btnNewTop = document.getElementById('btnNewRabTop');
+      const roleBannerAction = document.getElementById('roleBannerAction');
+      document.getElementById('roleBannerTitle').textContent = `Halo, ${user.full_name}`;
+      document.getElementById('roleBannerTag').textContent = meta.label;
+      document.getElementById('roleBannerDesc').textContent = meta.desc;
+
+      if (user.role === 'sie_pembangunan' || user.role === 'admin') {
+        btnNewTop.classList.remove('hidden');
+        roleBannerAction.innerHTML = `
+          <button onclick="openRabFormModal()" class="px-4 py-2.5 rounded-xl bg-white text-emerald-800 hover:bg-emerald-50 font-bold text-xs flex items-center gap-2 shadow-sm">
+            <i data-lucide="plus-circle" class="w-4 h-4"></i>
+            <span>Buat Pengajuan RAB Baru</span>
+          </button>`;
+      } else {
+        btnNewTop.classList.add('hidden');
+        roleBannerAction.innerHTML = `
+          <button onclick="switchTab('rab')" class="px-4 py-2.5 rounded-xl bg-white/15 hover:bg-white/25 text-white font-semibold text-xs flex items-center gap-2">
+            <i data-lucide="clipboard-check" class="w-4 h-4"></i>
+            <span>Tinjau Antrean Dokumen</span>
+          </button>`;
+      }
+
+      refreshAllViews();
+      showToast(`Selamat datang, ${user.full_name}!`);
+    }
+
+    function handleLogout() {
+      currentUser = null;
+      sessionStorage.removeItem('sirab_session_user');
+      document.getElementById('mainApp').classList.add('hidden');
+      document.getElementById('loginScreen').classList.remove('hidden');
+      document.getElementById('loginPassword').value = '';
+      lucide.createIcons();
+    }
+
+    // =========================================================================
+    // 5. NAVIGASI TAB & RENDER VIEW
+    // =========================================================================
+    function switchTab(tabName) {
+      ['overview', 'rab', 'schedule', 'users'].forEach(t => {
+        const content = document.getElementById(`tabContent-${t}`);
+        const btn = document.getElementById(`tabBtn-${t}`);
+        if (!content || !btn) return;
+        if (t === tabName) {
+          content.classList.remove('hidden');
+          btn.classList.add('border-emerald-600', 'text-emerald-700', 'font-semibold');
+          btn.classList.remove('border-transparent', 'text-slate-600', 'font-medium');
+        } else {
+          content.classList.add('hidden');
+          btn.classList.remove('border-emerald-600', 'text-emerald-700', 'font-semibold');
+          btn.classList.add('border-transparent', 'text-slate-600', 'font-medium');
+        }
+      });
+      lucide.createIcons();
+    }
+
+    function refreshAllViews() {
+      renderOverview();
+      renderStatusPills();
+      renderRabList();
+      renderTimeline();
+      if (currentUser && currentUser.role === 'admin') renderUsersTable();
+      lucide.createIcons();
+    }
+
+    function getFundingBadge(sumber, note) {
+      const map = {
+        'Dana Desa': 'bg-emerald-50 text-emerald-700 border-emerald-200',
+        'Dana Dusun': 'bg-blue-50 text-blue-700 border-blue-200',
+        'Swasembada Warga Dusun': 'bg-amber-50 text-amber-700 border-amber-200',
+        'Lain-lain': 'bg-purple-50 text-purple-700 border-purple-200'
+      };
+      const cls = map[sumber] || 'bg-slate-100 text-slate-700 border-slate-200';
+      const label = sumber === 'Lain-lain' && note ? `Lain-lain (${note})` : sumber;
+      return `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${cls}">${label}</span>`;
+    }
+
+    function getStatusBadge(status) {
+      const map = {
+        'Draft': 'bg-slate-100 text-slate-700',
+        'Menunggu RW': 'bg-amber-100 text-amber-800',
+        'Menunggu Kasun': 'bg-purple-100 text-purple-800',
+        'Disetujui': 'bg-emerald-100 text-emerald-800',
+        'Revisi': 'bg-rose-100 text-rose-800'
+      };
+      return `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold ${map[status] || 'bg-slate-100 text-slate-700'}">${status}</span>`;
+    }
+
+    function getDanaBadge(statusDana) {
+      if (statusDana === 'Sudah Didistribusikan') {
+        return `<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-teal-100 text-teal-800"><i data-lucide="check-circle" class="w-3 h-3"></i>Dana Sudah Didistribusikan</span>`;
+      }
+      if (statusDana === 'Menunggu Distribusi') {
+        return `<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-orange-100 text-orange-800"><i data-lucide="clock" class="w-3 h-3"></i>Menunggu Distribusi Bendahara</span>`;
+      }
+      return `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-500">Belum Dicairkan</span>`;
+    }
+
+    function renderOverview() {
+      const totalBudget = rabProjects.reduce((s, p) => s + Number(p.total_anggaran || 0), 0);
+      const approvedList = rabProjects.filter(p => p.status_approval === 'Disetujui');
+      const approvedBudget = approvedList.reduce((s, p) => s + Number(p.total_anggaran || 0), 0);
+      const disbursedList = rabProjects.filter(p => p.status_dana === 'Sudah Didistribusikan');
+      const disbursedBudget = disbursedList.reduce((s, p) => s + Number(p.dana_tersalurkan || p.total_anggaran || 0), 0);
+      const pendingCount = rabProjects.filter(p => p.status_approval === 'Menunggu RW' || p.status_approval === 'Menunggu Kasun' || p.status_dana === 'Menunggu Distribusi').length;
+
+      document.getElementById('kpiTotalBudget').textContent = formatRupiah(totalBudget);
+      document.getElementById('kpiTotalCount').textContent = `${rabProjects.length} dokumen proyek terdaftar`;
+      document.getElementById('kpiApprovedBudget').textContent = formatRupiah(approvedBudget);
+      document.getElementById('kpiApprovedCount').textContent = `${approvedList.length} proyek disahkan Kasun`;
+      document.getElementById('kpiDisbursedBudget').textContent = formatRupiah(disbursedBudget);
+      document.getElementById('kpiDisbursedCount').textContent = `${disbursedList.length} proyek telah dicairkan`;
+      document.getElementById('kpiPendingCount').textContent = `${pendingCount} Dokumen`;
+      document.getElementById('navBadgePending').textContent = pendingCount;
+
+      renderFundingSummary(totalBudget);
+
+      // Panel RAB Disahkan Semua Jenjang (untuk Sie Pembangunan & seluruh perangkat)
+      const approvedContainer = document.getElementById('approvedOverviewList');
+      if (approvedList.length === 0) {
+        approvedContainer.innerHTML = `<div class="p-6 text-center text-xs text-slate-400 bg-slate-50 rounded-xl">Belum ada RAB yang disahkan Kasun.</div>`;
+      } else {
+        approvedContainer.innerHTML = approvedList.map(p => `
+          <div class="p-4 rounded-xl border border-slate-200 hover:border-emerald-300 transition bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div class="space-y-1">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="text-[11px] font-mono font-bold text-slate-500">${p.kode_rab}</span>
+                ${getFundingBadge(p.sumber_dana, p.funding_note)}
+                ${getDanaBadge(p.status_dana)}
+              </div>
+              <div class="font-bold text-sm text-slate-900">${p.judul_proyek}</div>
+              <div class="text-xs text-slate-500">Anggaran Sah: <strong class="text-emerald-700">${formatRupiah(p.total_anggaran)}</strong> • Progres Fisik: <strong>${p.progres_fisik || 0}%</strong></div>
+            </div>
+            <button onclick="openRabDetailModal('${p.id}')" class="px-3.5 py-2 rounded-xl bg-white border border-slate-200 hover:border-emerald-500 text-xs font-semibold text-slate-700 hover:text-emerald-700 shrink-0">
+              Detail & Pengesahan
+            </button>
+          </div>
+        `).join('');
+      }
+    }
+
+    function renderFundingSummary(totalAllBudget) {
+      const sources = [
+        { name: 'Dana Desa', color: 'bg-emerald-500' },
+        { name: 'Dana Dusun', color: 'bg-blue-500' },
+        { name: 'Swasembada Warga Dusun', color: 'bg-amber-500' },
+        { name: 'Lain-lain', color: 'bg-purple-500' }
+      ];
+
+      const container = document.getElementById('fundingSummaryContainer');
+      container.innerHTML = sources.map(src => {
+        const matched = rabProjects.filter(p => p.sumber_dana === src.name);
+        const sum = matched.reduce((acc, p) => acc + Number(p.total_anggaran || 0), 0);
+        const pct = totalAllBudget > 0 ? Math.round((sum / totalAllBudget) * 100) : 0;
+        return `
+          <div>
+            <div class="flex items-center justify-between text-xs mb-1">
+              <span class="font-semibold text-slate-700">${src.name} <span class="text-slate-400 font-normal">(${matched.length} proyek)</span></span>
+              <span class="font-bold text-slate-900">${formatRupiah(sum)} <span class="text-slate-400 font-normal">(${pct}%)</span></span>
+            </div>
+            <div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+              <div class="${src.color} h-full rounded-full" style="width: ${pct}%"></div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderStatusPills() {
+      const pills = [
+        { key: 'ALL', label: 'Semua Dokumen', count: rabProjects.length },
+        { key: 'Disetujui', label: 'Disahkan Kasun (ACC)', count: rabProjects.filter(p => p.status_approval === 'Disetujui').length },
+        { key: 'Menunggu RW', label: 'Menunggu Approval 1 (RW)', count: rabProjects.filter(p => p.status_approval === 'Menunggu RW').length },
+        { key: 'Menunggu Kasun', label: 'Menunggu ACC Terakhir (Kasun)', count: rabProjects.filter(p => p.status_approval === 'Menunggu Kasun').length },
+        { key: 'MENUNGGU_DANA', label: 'Siap Distribusi Bendahara', count: rabProjects.filter(p => p.status_dana === 'Menunggu Distribusi').length },
+        { key: 'Draft', label: 'Draft / Revisi', count: rabProjects.filter(p => p.status_approval === 'Draft' || p.status_approval === 'Revisi').length }
+      ];
+
+      document.getElementById('statusFilterPills').innerHTML = pills.map(p => {
+        const active = activeStatusFilter === p.key;
+        const cls = active
+          ? 'bg-emerald-600 text-white border-emerald-600'
+          : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100';
+        return `
+          <button onclick="setStatusFilter('${p.key}')" class="px-3 py-1.5 rounded-full border text-xs font-semibold whitespace-nowrap flex items-center gap-1.5 transition ${cls}">
+            <span>${p.label}</span>
+            <span class="px-1.5 py-0.2 rounded-full text-[10px] ${active ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'}">${p.count}</span>
+          </button>
+        `;
+      }).join('');
+    }
+
+    function setStatusFilter(key) {
+      activeStatusFilter = key;
+      renderStatusPills();
+      renderRabList();
+    }
+
+    function renderRabList() {
+      const keyword = (document.getElementById('searchRabInput').value || '').toLowerCase();
+      const fundingFilter = document.getElementById('filterFundingSelect').value;
+
+      const filtered = rabProjects.filter(p => {
+        const matchSearch = (p.judul_proyek || '').toLowerCase().includes(keyword) ||
+          (p.kode_rab || '').toLowerCase().includes(keyword) ||
+          (p.lokasi_rt_rw || '').toLowerCase().includes(keyword);
+        const matchFunding = fundingFilter === 'ALL' || p.sumber_dana === fundingFilter;
+        let matchStatus = true;
+        if (activeStatusFilter === 'MENUNGGU_DANA') matchStatus = p.status_dana === 'Menunggu Distribusi';
+        else if (activeStatusFilter === 'Draft') matchStatus = p.status_approval === 'Draft' || p.status_approval === 'Revisi';
+        else if (activeStatusFilter !== 'ALL') matchStatus = p.status_approval === activeStatusFilter;
+        return matchSearch && matchFunding && matchStatus;
+      });
+
+      const container = document.getElementById('rabListContainer');
+      if (filtered.length === 0) {
+        container.innerHTML = `<div class="bg-white p-10 rounded-2xl border border-slate-200 text-center text-sm text-slate-500">Tidak ada dokumen RAB yang sesuai filter pencarian.</div>`;
+        return;
+      }
+
+      container.innerHTML = filtered.map(p => `
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:border-emerald-300 transition flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div class="space-y-2 flex-1">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="text-xs font-mono font-bold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-lg">${p.kode_rab}</span>
+              ${getStatusBadge(p.status_approval)}
+              ${getDanaBadge(p.status_dana)}
+              ${getFundingBadge(p.sumber_dana, p.funding_note)}
+            </div>
+            <h4 class="font-bold text-base text-slate-900">${p.judul_proyek}</h4>
+            <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
+              <span class="flex items-center gap-1"><i data-lucide="map-pin" class="w-3.5 h-3.5"></i> ${p.lokasi_rt_rw}</span>
+              <span class="flex items-center gap-1"><i data-lucide="calendar" class="w-3.5 h-3.5"></i> ${p.tanggal_mulai} s/d ${p.tanggal_selesai}</span>
+              <span class="flex items-center gap-1"><i data-lucide="hammer" class="w-3.5 h-3.5"></i> Progres Fisik: <strong>${p.progres_fisik || 0}%</strong></span>
+            </div>
+          </div>
+
+          <div class="flex flex-col sm:flex-row lg:flex-col items-start sm:items-center lg:items-end justify-between gap-3 pt-3 lg:pt-0 border-t lg:border-t-0 border-slate-100">
+            <div class="text-left lg:text-right">
+              <div class="text-[11px] uppercase font-semibold text-slate-400">Total Anggaran RAB</div>
+              <div class="text-lg font-extrabold text-emerald-700">${formatRupiah(p.total_anggaran)}</div>
+            </div>
+            <div class="flex items-center gap-2">
+              ${(currentUser && (currentUser.role === 'sie_pembangunan' || currentUser.role === 'admin') && (p.status_approval === 'Draft' || p.status_approval === 'Revisi')) ? `
+                <button onclick="openRabFormModal('${p.id}')" class="px-3 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-xs font-semibold text-slate-700">
+                  Edit RAB
+                </button>
+              ` : ''}
+              <button onclick="openRabDetailModal('${p.id}')" class="px-4 py-2 rounded-xl bg-slate-900 hover:bg-emerald-700 text-white text-xs font-semibold transition flex items-center gap-1.5">
+                <i data-lucide="eye" class="w-3.5 h-3.5"></i>
+                <span>Detail & Proses</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      `).join('');
+      lucide.createIcons();
+    }
+
+    function renderTimeline() {
+      const container = document.getElementById('timelineContainer');
+      if (rabProjects.length === 0) {
+        container.innerHTML = `<div class="text-center text-sm text-slate-400 py-8">Belum ada jadwal proyek.</div>`;
+        return;
+      }
+
+      container.innerHTML = rabProjects.map(p => {
+        const isApproved = p.status_approval === 'Disetujui';
+        return `
+          <div class="p-4 rounded-2xl border border-slate-200 bg-slate-50/60 space-y-3">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span class="text-xs font-mono font-bold text-slate-500">${p.kode_rab}</span>
+                  ${getStatusBadge(p.status_approval)}
+                  ${getFundingBadge(p.sumber_dana, p.funding_note)}
+                </div>
+                <div class="font-bold text-sm text-slate-900 mt-1">${p.judul_proyek}</div>
+              </div>
+              <div class="text-xs text-slate-600 font-medium bg-white px-3 py-1.5 rounded-xl border border-slate-200">
+                Jadwal: <strong>${p.tanggal_mulai}</strong> → <strong>${p.tanggal_selesai}</strong>
+              </div>
+            </div>
+
+            <div>
+              <div class="flex justify-between text-xs mb-1">
+                <span class="text-slate-500">Realisasi Pengerjaan Fisik</span>
+                <span class="font-bold ${isApproved ? 'text-emerald-700' : 'text-amber-700'}">${p.progres_fisik || 0}%</span>
+              </div>
+              <div class="w-full h-3 bg-slate-200 rounded-full overflow-hidden">
+                <div class="${isApproved ? 'bg-emerald-500' : 'bg-amber-400'} h-full rounded-full transition-all" style="width: ${p.progres_fisik || 0}%"></div>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // =========================================================================
+    // 6. FORM BUAT & EDIT RAB (SIE PEMBANGUNAN)
+    // =========================================================================
+    function toggleFundingNoteField() {
+      const val = document.getElementById('rabSumberDana').value;
+      const wrap = document.getElementById('fundingNoteWrapper');
+      if (val === 'Lain-lain') wrap.classList.remove('hidden');
+      else wrap.classList.add('hidden');
+    }
+
+    function openRabFormModal(rabId = null) {
+      document.getElementById('rabForm').reset();
+      document.getElementById('editRabId').value = rabId || '';
+      const tbody = document.getElementById('rabItemsTableBody');
+      tbody.innerHTML = '';
+
+      if (rabId) {
+        const p = rabProjects.find(x => x.id === rabId);
+        if (p) {
+          document.getElementById('rabFormModalTitle').textContent = `Edit RAB: ${p.kode_rab}`;
+          document.getElementById('rabJudul').value = p.judul_proyek;
+          document.getElementById('rabBidang').value = p.bidang_kegiatan;
+          document.getElementById('rabLokasi').value = p.lokasi_rt_rw;
+          document.getElementById('rabSumberDana').value = p.sumber_dana;
+          document.getElementById('rabFundingNote').value = p.funding_note || '';
+          document.getElementById('rabMulai').value = p.tanggal_mulai;
+          document.getElementById('rabSelesai').value = p.tanggal_selesai;
+          document.getElementById('rabDeskripsi').value = p.deskripsi || '';
+          (p.items || []).forEach(it => addRabItemRow(it));
+        }
+      } else {
+        document.getElementById('rabFormModalTitle').textContent = 'Buat Pengajuan RAB Baru';
+        addRabItemRow({ uraian: '', kategori: 'Material', volume: 1, satuan: 'unit', harga_satuan: 0 });
+      }
+
+      toggleFundingNoteField();
+      recalculateRabFormTotal();
+      document.getElementById('rabFormModal').classList.remove('hidden');
+      lucide.createIcons();
+    }
+
+    function closeRabFormModal() {
+      document.getElementById('rabFormModal').classList.add('hidden');
+    }
+
+    function addRabItemRow(item = {}) {
+      const tbody = document.getElementById('rabItemsTableBody');
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="p-2"><input type="text" required value="${item.uraian || ''}" placeholder="Nama material/upah" class="item-uraian w-full px-2.5 py-1.5 rounded-lg border border-slate-200" /></td>
+        <td class="p-2">
+          <select class="item-kategori w-full px-2 py-1.5 rounded-lg border border-slate-200 bg-white">
+            <option ${item.kategori === 'Material' ? 'selected' : ''}>Material</option>
+            <option ${item.kategori === 'Upah Tenaga' ? 'selected' : ''}>Upah Tenaga</option>
+            <option ${item.kategori === 'Sewa Alat' ? 'selected' : ''}>Sewa Alat</option>
+          </select>
+        </td>
+        <td class="p-2"><input type="number" step="0.01" min="0.01" required value="${item.volume || 1}" oninput="recalculateRabFormTotal()" class="item-vol w-full px-2 py-1.5 rounded-lg border border-slate-200 text-right" /></td>
+        <td class="p-2"><input type="text" required value="${item.satuan || 'unit'}" class="item-satuan w-full px-2 py-1.5 rounded-lg border border-slate-200" /></td>
+        <td class="p-2"><input type="number" min="0" required value="${item.harga_satuan || 0}" oninput="recalculateRabFormTotal()" class="item-harga w-full px-2 py-1.5 rounded-lg border border-slate-200 text-right" /></td>
+        <td class="p-2 text-right font-semibold item-subtotal">Rp 0</td>
+        <td class="p-2 text-center"><button type="button" onclick="this.closest('tr').remove(); recalculateRabFormTotal();" class="text-rose-500 hover:text-rose-700"><i data-lucide="trash-2" class="w-4 h-4"></i></button></td>
+      `;
+      tbody.appendChild(tr);
+      recalculateRabFormTotal();
+      lucide.createIcons();
+    }
+
+    function recalculateRabFormTotal() {
+      let total = 0;
+      document.querySelectorAll('#rabItemsTableBody tr').forEach(tr => {
+        const vol = parseFloat(tr.querySelector('.item-vol').value) || 0;
+        const harga = parseFloat(tr.querySelector('.item-harga').value) || 0;
+        const sub = vol * harga;
+        total += sub;
+        tr.querySelector('.item-subtotal').textContent = formatRupiah(sub);
+      });
+      document.getElementById('rabFormTotalDisplay').textContent = formatRupiah(total);
+      return total;
+    }
+
+    async function handleSaveRab(e) {
+      e.preventDefault();
+      const mode = e.target.dataset.submitMode || 'Menunggu RW';
+      const editId = document.getElementById('editRabId').value;
+      const total = recalculateRabFormTotal();
+
+      const items = [];
+      document.querySelectorAll('#rabItemsTableBody tr').forEach((tr, idx) => {
+        items.push({
+          id: `item-${Date.now()}-${idx}`,
+          uraian: tr.querySelector('.item-uraian').value.trim(),
+          kategori: tr.querySelector('.item-kategori').value,
+          volume: parseFloat(tr.querySelector('.item-vol').value) || 1,
+          satuan: tr.querySelector('.item-satuan').value.trim(),
+          harga_satuan: parseFloat(tr.querySelector('.item-harga').value) || 0
+        });
+      });
+
+      const payload = {
+        judul_proyek: document.getElementById('rabJudul').value.trim(),
+        bidang_kegiatan: document.getElementById('rabBidang').value,
+        lokasi_rt_rw: document.getElementById('rabLokasi').value.trim(),
+        sumber_dana: document.getElementById('rabSumberDana').value,
+        funding_note: document.getElementById('rabSumberDana').value === 'Lain-lain' ? document.getElementById('rabFundingNote').value.trim() : '',
+        tanggal_mulai: document.getElementById('rabMulai').value,
+        tanggal_selesai: document.getElementById('rabSelesai').value,
+        deskripsi: document.getElementById('rabDeskripsi').value.trim(),
+        total_anggaran: total,
+        status_approval: mode
+      };
+
+      const logEntry = {
+        peran: ROLE_META[currentUser.role].label,
+        nama_pejabat: currentUser.full_name,
+        aksi: mode === 'Menunggu RW' ? 'Diajukan ke Ketua RW (Approval 1)' : 'Disimpan sebagai Draft',
+        catatan: 'Dokumen RAB disusun oleh Sie Pembangunan.',
+        created_at: new Date().toISOString()
+      };
+
+      if (isLiveSupabase && supabaseClient) {
+        try {
+          let targetRabId = editId;
+          if (editId) {
+            await supabaseClient.from('rab_projects').update(payload).eq('id', editId);
+            await supabaseClient.from('rab_items').delete().eq('rab_id', editId);
+          } else {
+            const kode = `RAB/DSN-SJ/2026/${String(rabProjects.length + 1).padStart(3, '0')}`;
+            const { data: inserted, error } = await supabaseClient.from('rab_projects').insert([{
+              ...payload,
+              kode_rab: kode,
+              status_dana: 'Belum Dicairkan',
+              progres_fisik: 0,
+              dibuat_oleh: currentUser.full_name
+            }]).select().single();
+            if (error) throw error;
+            targetRabId = inserted.id;
+          }
+
+          if (items.length > 0) {
+            await supabaseClient.from('rab_items').insert(items.map(i => ({
+              rab_id: targetRabId,
+              uraian: i.uraian,
+              kategori: i.kategori,
+              volume: i.volume,
+              satuan: i.satuan,
+              harga_satuan: i.harga_satuan
+            })));
+          }
+          await supabaseClient.from('rab_approval_logs').insert([{ rab_id: targetRabId, ...logEntry }]);
+          await fetchAllFromSupabase();
+        } catch (err) {
+          showToast('Gagal menyimpan ke Supabase: ' + err.message, 'error');
+          return;
+        }
+      } else {
+        if (editId) {
+          const idx = rabProjects.findIndex(p => p.id === editId);
+          if (idx > -1) {
+            rabProjects[idx] = { ...rabProjects[idx], ...payload, items };
+            rabProjects[idx].logs.push(logEntry);
+          }
+        } else {
+          const kode = `RAB/DSN-SJ/2026/${String(rabProjects.length + 1).padStart(3, '0')}`;
+          rabProjects.unshift({
+            id: `rab-${Date.now()}`,
+            kode_rab: kode,
+            ...payload,
+            status_dana: 'Belum Dicairkan',
+            dana_tersalurkan: 0,
+            progres_fisik: 0,
+            dibuat_oleh: currentUser.full_name,
+            items,
+            logs: [logEntry]
+          });
+        }
+        saveLocalProjects();
+      }
+
+      closeRabFormModal();
+      refreshAllViews();
+      showToast(mode === 'Menunggu RW' ? 'RAB berhasil diajukan ke Ketua RW!' : 'Draft RAB berhasil disimpan.');
+    }
+
+    // =========================================================================
+    // 7. DETAIL, APPROVAL RW -> KASUN -> DISTRIBUSI BENDAHARA & CETAK
+    // =========================================================================
+    function openRabDetailModal(rabId) {
+      const p = rabProjects.find(x => x.id === rabId);
+      if (!p) return;
+
+      const role = currentUser.role;
+      let actionPanelHtml = '';
+
+      // Panel Aksi Ketua RW (Approval 1)
+      if ((role === 'rw' || role === 'admin') && p.status_approval === 'Menunggu RW') {
+        actionPanelHtml = `
+          <div class="p-4 rounded-2xl bg-amber-50 border border-amber-200 space-y-3 no-print">
+            <div class="font-bold text-sm text-amber-900 flex items-center gap-2">
+              <i data-lucide="stamp" class="w-4 h-4"></i>
+              <span>Tindakan Approval Tahap 1 (Ketua RW)</span>
+            </div>
+            <textarea id="approvalNoteInput" rows="2" placeholder="Catatan verifikasi RW (opsional)..." class="w-full px-3 py-2 rounded-xl border border-amber-300 bg-white text-xs"></textarea>
+            <div class="flex flex-wrap gap-2">
+              <button onclick="processApproval('${p.id}', 'Menunggu Kasun')" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold">
+                Setujui RW & Teruskan ke Kasun
+              </button>
+              <button onclick="processApproval('${p.id}', 'Revisi')" class="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold">
+                Kembalikan untuk Revisi
+              </button>
+            </div>
+          </div>`;
+      }
+
+      // Panel Aksi Kepala Dusun / Kasun (Approval Terakhir)
+      if ((role === 'kasun' || role === 'admin') && p.status_approval === 'Menunggu Kasun') {
+        actionPanelHtml = `
+          <div class="p-4 rounded-2xl bg-purple-50 border border-purple-200 space-y-3 no-print">
+            <div class="font-bold text-sm text-purple-900 flex items-center gap-2">
+              <i data-lucide="award" class="w-4 h-4"></i>
+              <span>Tindakan Approval Terakhir (Kepala Dusun / Kasun)</span>
+            </div>
+            <textarea id="approvalNoteInput" rows="2" placeholder="Catatan pengesahan Kepala Dusun..." class="w-full px-3 py-2 rounded-xl border border-purple-300 bg-white text-xs"></textarea>
+            <div class="flex flex-wrap gap-2">
+              <button onclick="processApproval('${p.id}', 'Disetujui')" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold">
+                ACC Terakhir (Sahkan & Teruskan ke Bendahara)
+              </button>
+              <button onclick="processApproval('${p.id}', 'Revisi')" class="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold">
+                Tolak / Minta Revisi
+              </button>
+            </div>
+          </div>`;
+      }
+
+      // Panel Aksi Bendahara Dusun (Pendistribusian Dana Proyek)
+      if ((role === 'bendahara' || role === 'admin') && p.status_approval === 'Disetujui' && p.status_dana === 'Menunggu Distribusi') {
+        actionPanelHtml = `
+          <div class="p-4 rounded-2xl bg-teal-50 border border-teal-200 space-y-3 no-print">
+            <div class="font-bold text-sm text-teal-900 flex items-center gap-2">
+              <i data-lucide="banknote" class="w-4 h-4"></i>
+              <span>Pendistribusian & Pencairan Dana Proyek (Bendahara Dusun)</span>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="block text-[11px] font-semibold text-teal-900 mb-1">Nominal Dana Disalurkan (Rp)</label>
+                <input id="disburseAmountInput" type="number" value="${p.total_anggaran}" class="w-full px-3 py-2 rounded-xl border border-teal-300 bg-white text-xs font-bold" />
+              </div>
+              <div>
+                <label class="block text-[11px] font-semibold text-teal-900 mb-1">Metode Penyaluran</label>
+                <select id="disburseMethodInput" class="w-full px-3 py-2 rounded-xl border border-teal-300 bg-white text-xs">
+                  <option>Transfer Rekening TPK Dusun</option>
+                  <option>Penyerahan Tunai Berita Acara</option>
+                  <option>Pembayaran Langsung Supplier Material</option>
+                </select>
+              </div>
+            </div>
+            <textarea id="disburseNoteInput" rows="2" placeholder="Nomor bukti kas / keterangan pencairan dana..." class="w-full px-3 py-2 rounded-xl border border-teal-300 bg-white text-xs"></textarea>
+            <button onclick="processDisbursement('${p.id}')" class="px-4 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs font-bold">
+              Konfirmasi Dana Telah Didistribusikan
+            </button>
+          </div>`;
+      }
+
+      // Panel Update Progres Fisik (Sie Pembangunan)
+      let progressPanelHtml = '';
+      if ((role === 'sie_pembangunan' || role === 'admin') && p.status_approval === 'Disetujui') {
+        progressPanelHtml = `
+          <div class="p-4 rounded-2xl bg-blue-50 border border-blue-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 no-print">
+            <div>
+              <div class="font-bold text-xs text-blue-900">Update Progres Fisik Lapangan (Sie Pembangunan)</div>
+              <div class="text-[11px] text-blue-700">Geser persentase capaian pengerjaan proyek saat ini.</div>
+            </div>
+            <div class="flex items-center gap-2">
+              <input id="progressSliderInput" type="number" min="0" max="100" value="${p.progres_fisik || 0}" class="w-20 px-2.5 py-1.5 rounded-xl border border-blue-300 bg-white text-xs font-bold text-center" />
+              <span class="text-xs font-bold text-blue-900">%</span>
+              <button onclick="updateProjectProgress('${p.id}')" class="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold">Simpan</button>
+            </div>
+          </div>`;
+      }
+
+      const itemsRows = (p.items || []).map((it, i) => `
+        <tr class="border-b border-slate-200">
+          <td class="py-2 px-3 text-center">${i + 1}</td>
+          <td class="py-2 px-3 font-medium">${it.uraian}</td>
+          <td class="py-2 px-3">${it.kategori}</td>
+          <td class="py-2 px-3 text-right">${it.volume} ${it.satuan}</td>
+          <td class="py-2 px-3 text-right">${formatRupiah(it.harga_satuan)}</td>
+          <td class="py-2 px-3 text-right font-semibold">${formatRupiah(Number(it.volume) * Number(it.harga_satuan))}</td>
+        </tr>
+      `).join('');
+
+      const logsHtml = (p.logs || []).map(l => `
+        <div class="flex items-start gap-3 text-xs">
+          <div class="w-2 h-2 rounded-full bg-emerald-500 mt-1.5 shrink-0"></div>
+          <div>
+            <div class="font-bold text-slate-800">${l.aksi} — <span class="text-emerald-700">${l.nama_pejabat}</span> (${l.peran})</div>
+            ${l.catatan ? `<div class="text-slate-600 italic">"${l.catatan}"</div>` : ''}
+          </div>
+        </div>
+      `).join('');
+
+      document.getElementById('rabDetailBody').innerHTML = `
+        ${actionPanelHtml}
+        ${progressPanelHtml}
+
+        <div id="printArea" class="space-y-5">
+          <!-- Kop Dokumen Resmi -->
+          <div class="border-b-2 border-slate-800 pb-4 text-center">
+            <div class="text-xs font-bold uppercase tracking-widest text-slate-500">Pemerintah Kabupaten • Kecamatan • Desa</div>
+            <h2 class="text-lg font-extrabold uppercase text-slate-900 mt-0.5">Rencana Anggaran Biaya (RAB) Pembangunan Dusun Sejo</h2>
+            <div class="text-xs font-mono text-slate-600 mt-1">Nomor Dokumen: <strong>${p.kode_rab}</strong></div>
+          </div>
+
+          <!-- Metadata Proyek -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs bg-slate-50 p-4 rounded-2xl border border-slate-200">
+            <div><span class="text-slate-500">Judul Proyek:</span> <strong class="text-slate-900 block text-sm">${p.judul_proyek}</strong></div>
+            <div><span class="text-slate-500">Bidang & Lokasi:</span> <strong class="text-slate-900 block">${p.bidang_kegiatan} • ${p.lokasi_rt_rw}</strong></div>
+            <div><span class="text-slate-500">Sumber Dana:</span> <div class="mt-0.5">${getFundingBadge(p.sumber_dana, p.funding_note)}</div></div>
+            <div><span class="text-slate-500">Jadwal Pelaksanaan:</span> <strong class="text-slate-900 block">${p.tanggal_mulai} s/d ${p.tanggal_selesai}</strong></div>
+            <div><span class="text-slate-500">Status Approval:</span> <div class="mt-0.5">${getStatusBadge(p.status_approval)}</div></div>
+            <div><span class="text-slate-500">Status Pendistribusian Dana:</span> <div class="mt-0.5">${getDanaBadge(p.status_dana)}</div></div>
+          </div>
+
+          <!-- Tabel Rincian Anggaran -->
+          <div class="overflow-x-auto border border-slate-300 rounded-xl">
+            <table class="w-full text-left text-xs border-collapse">
+              <thead class="bg-slate-100 text-slate-700 uppercase border-b border-slate-300">
+                <tr>
+                  <th class="py-2.5 px-3 text-center w-10">No</th>
+                  <th class="py-2.5 px-3">Uraian Pekerjaan / Bahan</th>
+                  <th class="py-2.5 px-3">Kategori</th>
+                  <th class="py-2.5 px-3 text-right">Volume</th>
+                  <th class="py-2.5 px-3 text-right">Harga Satuan</th>
+                  <th class="py-2.5 px-3 text-right">Jumlah</th>
+                </tr>
+              </thead>
+              <tbody>${itemsRows}</tbody>
+              <tfoot class="bg-slate-100 font-bold text-slate-900 border-t-2 border-slate-300">
+                <tr>
+                  <td colspan="5" class="py-2.5 px-3 text-right uppercase">Total Anggaran Biaya:</td>
+                  <td class="py-2.5 px-3 text-right text-sm text-emerald-800">${formatRupiah(p.total_anggaran)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <!-- Lembar Tanda Tangan 4 Pejabat -->
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-6 text-center text-xs">
+            <div class="p-3 rounded-xl border border-slate-200">
+              <div class="text-slate-500">Disusun Oleh,</div>
+              <div class="font-bold text-slate-800">Sie Pembangunan</div>
+              <div class="h-12 flex items-center justify-center text-[10px] text-emerald-700 font-semibold">[Tanda Tangan Digital]</div>
+              <div class="font-bold underline text-slate-900">${p.dibuat_oleh || 'Sie Pembangunan'}</div>
+            </div>
+            <div class="p-3 rounded-xl border border-slate-200">
+              <div class="text-slate-500">Approval 1,</div>
+              <div class="font-bold text-slate-800">Ketua RW</div>
+              <div class="h-12 flex items-center justify-center text-[10px] font-semibold ${p.approved_rw_by ? 'text-emerald-700' : 'text-slate-400'}">
+                ${p.approved_rw_by ? '[Disetujui Digital]' : '(Menunggu)'}
+              </div>
+              <div class="font-bold underline text-slate-900">${p.approved_rw_by || '....................'}</div>
+            </div>
+            <div class="p-3 rounded-xl border border-slate-200">
+              <div class="text-slate-500">Approval Terakhir,</div>
+              <div class="font-bold text-slate-800">Kepala Dusun</div>
+              <div class="h-12 flex items-center justify-center text-[10px] font-semibold ${p.approved_kasun_by ? 'text-emerald-700' : 'text-slate-400'}">
+                ${p.approved_kasun_by ? '[ACC Final Digital]' : '(Menunggu)'}
+              </div>
+              <div class="font-bold underline text-slate-900">${p.approved_kasun_by || '....................'}</div>
+            </div>
+            <div class="p-3 rounded-xl border border-slate-200">
+              <div class="text-slate-500">Distribusi Dana,</div>
+              <div class="font-bold text-slate-800">Bendahara Dusun</div>
+              <div class="h-12 flex items-center justify-center text-[10px] font-semibold ${p.disbursed_by ? 'text-teal-700' : 'text-slate-400'}">
+                ${p.disbursed_by ? '[Dana Tersalurkan]' : '(Menunggu ACC)'}
+              </div>
+              <div class="font-bold underline text-slate-900">${p.disbursed_by || '....................'}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Jejak Audit -->
+        <div class="border-t border-slate-200 pt-4 space-y-2.5 no-print">
+          <h4 class="font-bold text-xs uppercase text-slate-500">Riwayat Proses & Jejak Otorisasi</h4>
+          <div class="space-y-2">${logsHtml}</div>
+        </div>
+      `;
+
+      document.getElementById('rabDetailModal').classList.remove('hidden');
+      lucide.createIcons();
+    }
+
+    function closeRabDetailModal() {
+      document.getElementById('rabDetailModal').classList.add('hidden');
+    }
+
+    async function processApproval(rabId, nextStatus) {
+      const p = rabProjects.find(x => x.id === rabId);
+      if (!p) return;
+      const note = (document.getElementById('approvalNoteInput')?.value || '').trim();
+      const now = new Date().toISOString();
+
+      const updates = { status_approval: nextStatus };
+      let actionLabel = '';
+
+      if (nextStatus === 'Menunggu Kasun') {
+        updates.approved_rw_by = currentUser.full_name;
+        updates.approved_rw_at = now;
+        actionLabel = 'Disetujui RW (Diteruskan ke Kasun)';
+      } else if (nextStatus === 'Disetujui') {
+        updates.approved_kasun_by = currentUser.full_name;
+        updates.approved_kasun_at = now;
+        updates.status_dana = 'Menunggu Distribusi';
+        actionLabel = 'ACC Terakhir Disetujui Kasun (Siap Distribusi Dana)';
+      } else {
+        actionLabel = 'Dikembalikan untuk Revisi';
+      }
+
+      const logEntry = {
+        peran: ROLE_META[currentUser.role].label,
+        nama_pejabat: currentUser.full_name,
+        aksi: actionLabel,
+        catatan: note,
+        created_at: now
+      };
+
+      if (isLiveSupabase && supabaseClient) {
+        await supabaseClient.from('rab_projects').update(updates).eq('id', rabId);
+        await supabaseClient.from('rab_approval_logs').insert([{ rab_id: rabId, ...logEntry }]);
+        await fetchAllFromSupabase();
+      } else {
+        Object.assign(p, updates);
+        p.logs.push(logEntry);
+        saveLocalProjects();
+      }
+
+      closeRabDetailModal();
+      refreshAllViews();
+      showToast(actionLabel);
+    }
+
+    async function processDisbursement(rabId) {
+      const p = rabProjects.find(x => x.id === rabId);
+      if (!p) return;
+      const amount = Number(document.getElementById('disburseAmountInput').value) || p.total_anggaran;
+      const method = document.getElementById('disburseMethodInput').value;
+      const note = (document.getElementById('disburseNoteInput').value || '').trim();
+      const now = new Date().toISOString();
+
+      const updates = {
+        status_dana: 'Sudah Didistribusikan',
+        dana_tersalurkan: amount,
+        metode_penyaluran: method,
+        disbursed_by: currentUser.full_name,
+        disbursed_at: now,
+        catatan_bendahara: note
+      };
+
+      const logEntry = {
+        peran: 'Bendahara Dusun',
+        nama_pejabat: currentUser.full_name,
+        aksi: `Dana Didistribusikan (${formatRupiah(amount)}) via ${method}`,
+        catatan: note,
+        created_at: now
+      };
+
+      if (isLiveSupabase && supabaseClient) {
+        await supabaseClient.from('rab_projects').update(updates).eq('id', rabId);
+        await supabaseClient.from('rab_approval_logs').insert([{ rab_id: rabId, ...logEntry }]);
+        await fetchAllFromSupabase();
+      } else {
+        Object.assign(p, updates);
+        p.logs.push(logEntry);
+        saveLocalProjects();
+      }
+
+      closeRabDetailModal();
+      refreshAllViews();
+      showToast('Pendistribusian dana proyek berhasil dicatat!');
+    }
+
+    async function updateProjectProgress(rabId) {
+      const p = rabProjects.find(x => x.id === rabId);
+      if (!p) return;
+      const val = Math.min(100, Math.max(0, parseInt(document.getElementById('progressSliderInput').value, 10) || 0));
+
+      if (isLiveSupabase && supabaseClient) {
+        await supabaseClient.from('rab_projects').update({ progres_fisik: val }).eq('id', rabId);
+        await fetchAllFromSupabase();
+      } else {
+        p.progres_fisik = val;
+        saveLocalProjects();
+      }
+
+      refreshAllViews();
+      openRabDetailModal(rabId);
+      showToast(`Progres fisik proyek diperbarui menjadi ${val}%.`);
+    }
+
+    // =========================================================================
+    // 8. MANAJEMEN PENGGUNA (ADMINISTRATOR)
+    // =========================================================================
+    function renderUsersTable() {
+      const tbody = document.getElementById('usersTableBody');
+      tbody.innerHTML = appUsers.map(u => {
+        const meta = ROLE_META[u.role] || ROLE_META.sie_pembangunan;
+        return `
+          <tr class="hover:bg-slate-50">
+            <td class="py-3 px-4 font-bold text-slate-900">${u.full_name}</td>
+            <td class="py-3 px-4 text-xs">
+              <div class="font-mono font-semibold text-slate-700">${u.username}</div>
+              <div class="text-slate-400">${u.email}</div>
+            </td>
+            <td class="py-3 px-4"><span class="px-2.5 py-1 rounded-full text-[11px] font-semibold ${meta.badgeClass}">${meta.label}</span></td>
+            <td class="py-3 px-4 text-xs text-slate-600">${u.wilayah}</td>
+            <td class="py-3 px-4">
+              <span class="px-2 py-0.5 rounded-full text-[11px] font-semibold ${u.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}">
+                ${u.is_active ? 'Aktif' : 'Nonaktif'}
+              </span>
+            </td>
+            <td class="py-3 px-4 text-right space-x-1">
+              <button onclick="openUserFormModal('${u.id}')" class="px-2.5 py-1 rounded-lg border border-slate-200 text-xs font-medium hover:bg-slate-100">Edit</button>
+              ${u.username !== 'admin' ? `<button onclick="toggleUserActive('${u.id}')" class="px-2.5 py-1 rounded-lg border border-slate-200 text-xs font-medium hover:bg-amber-50">${u.is_active ? 'Nonaktifkan' : 'Aktifkan'}</button>` : ''}
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function openUserFormModal(userId = null) {
+      document.getElementById('editUserId').value = userId || '';
+      if (userId) {
+        const u = appUsers.find(x => x.id === userId);
+        document.getElementById('userFormTitle').textContent = 'Edit Akun Pengguna';
+        document.getElementById('userFullName').value = u.full_name;
+        document.getElementById('userUsername').value = u.username;
+        document.getElementById('userPassword').value = u.password_hash;
+        document.getElementById('userEmail').value = u.email;
+        document.getElementById('userRole').value = u.role;
+        document.getElementById('userWilayah').value = u.wilayah;
+      } else {
+        document.getElementById('userFormTitle').textContent = 'Tambah Pengguna Baru';
+        document.getElementById('userFullName').value = '';
+        document.getElementById('userUsername').value = '';
+        document.getElementById('userPassword').value = '';
+        document.getElementById('userEmail').value = '';
+        document.getElementById('userRole').value = 'sie_pembangunan';
+        document.getElementById('userWilayah').value = 'Dusun Sejo';
+      }
+      document.getElementById('userFormModal').classList.remove('hidden');
+    }
+
+    function closeUserFormModal() {
+      document.getElementById('userFormModal').classList.add('hidden');
+    }
+
+    async function handleSaveUser(e) {
+      e.preventDefault();
+      const editId = document.getElementById('editUserId').value;
+      const userObj = {
+        full_name: document.getElementById('userFullName').value.trim(),
+        username: document.getElementById('userUsername').value.trim(),
+        password_hash: document.getElementById('userPassword').value.trim(),
+        email: document.getElementById('userEmail').value.trim(),
+        role: document.getElementById('userRole').value,
+        wilayah: document.getElementById('userWilayah').value.trim(),
+        is_active: true
+      };
+
+      if (isLiveSupabase && supabaseClient) {
+        if (editId) {
+          await supabaseClient.from('app_users').update(userObj).eq('id', editId);
+        } else {
+          await supabaseClient.from('app_users').insert([userObj]);
+        }
+        await fetchAllFromSupabase();
+      } else {
+        if (editId) {
+          const idx = appUsers.findIndex(u => u.id === editId);
+          if (idx > -1) appUsers[idx] = { ...appUsers[idx], ...userObj };
+        } else {
+          appUsers.push({ id: `u-${Date.now()}`, ...userObj });
+        }
+        saveLocalUsers();
+      }
+
+      closeUserFormModal();
+      renderUsersTable();
+      showToast('Data pengguna berhasil disimpan.');
+    }
+
+    async function toggleUserActive(userId) {
+      const u = appUsers.find(x => x.id === userId);
+      if (!u) return;
+      const nextState = !u.is_active;
+      if (isLiveSupabase && supabaseClient) {
+        await supabaseClient.from('app_users').update({ is_active: nextState }).eq('id', userId);
+        await fetchAllFromSupabase();
+      } else {
+        u.is_active = nextState;
+        saveLocalUsers();
+      }
+      renderUsersTable();
+      showToast(`Status akun ${u.username} diubah.`);
+    }
+
+    // =========================================================================
+    // 9. INISIALISASI SAAT HALAMAN DIMUAT
+    // =========================================================================
+    window.addEventListener('DOMContentLoaded', async () => {
+      lucide.createIcons();
+      await initSupabaseConnection();
+
+      const savedSession = sessionStorage.getItem('sirab_session_user');
+      if (savedSession) {
+        try {
+          completeLogin(JSON.parse(savedSession));
+        } catch (e) {
+          sessionStorage.removeItem('sirab_session_user');
+        }
+      }
+    });
+  </script>
+</body>
+</html>
